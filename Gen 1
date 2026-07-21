@@ -1,0 +1,1056 @@
+--[[
+    ===============================================
+     AXZEN UI LIBRARY  |  MADE BY: AXZEN
+    ===============================================
+    Features:
+    - Movable bubble icon (set via Roblox asset ID)
+    - Title bar with "MADE BY:AXZEN" credit
+    - Tab system with Headers
+    - Toggles, Sliders (value shown live), Buttons, Dropdowns
+    - Color Themes + tons of accessibility options, all in ONE Accessibility tab
+    - Smooth open AND close animation
+    - Code-settable window size: Library:SetSize(width, height)
+    - Auto hides chat/topbar while window open
+    - Settings are saved automatically to PlayerGui (XDEMIC_UI_SAVE)
+    - "Reset to Defaults" button in Accessibility tab
+    - Themed notification system (Library:Notify)
+    - Default theme: Dark, default transparency: 25%
+]]
+
+local Library = {}
+Library.__index = Library
+
+-------------------------------------------------
+-- SERVICES
+-------------------------------------------------
+local Players          = game:GetService("Players")
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui       = game:GetService("StarterGui")
+local SoundService     = game:GetService("SoundService")
+local HttpService      = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
+
+-------------------------------------------------
+-- CLEANUP OLD INSTANCE
+-------------------------------------------------
+if PlayerGui:FindFirstChild("AXZEN_UI") then
+    PlayerGui.AXZEN_UI:Destroy()
+end
+
+-------------------------------------------------
+-- COLOR THEMES
+-------------------------------------------------
+local ThemePresets = {
+    Purple  = { Background = Color3.fromRGB(45, 0, 70),   Accent = Color3.fromRGB(168, 60, 240), AccentDark = Color3.fromRGB(110, 30, 170), ElementBG = Color3.fromRGB(65, 15, 100),  Text = Color3.fromRGB(240, 235, 255), SubText = Color3.fromRGB(190, 175, 210) },
+    Red     = { Background = Color3.fromRGB(70, 5, 10),   Accent = Color3.fromRGB(230, 60, 60),  AccentDark = Color3.fromRGB(150, 30, 30),  ElementBG = Color3.fromRGB(90, 15, 20),   Text = Color3.fromRGB(255, 235, 235), SubText = Color3.fromRGB(220, 175, 175) },
+    Blue    = { Background = Color3.fromRGB(5, 15, 60),   Accent = Color3.fromRGB(60, 130, 240), AccentDark = Color3.fromRGB(30, 80, 170),  ElementBG = Color3.fromRGB(15, 30, 90),   Text = Color3.fromRGB(230, 240, 255), SubText = Color3.fromRGB(170, 195, 220) },
+    Green   = { Background = Color3.fromRGB(5, 45, 20),   Accent = Color3.fromRGB(60, 220, 120), AccentDark = Color3.fromRGB(30, 140, 70),  ElementBG = Color3.fromRGB(10, 65, 30),   Text = Color3.fromRGB(230, 255, 235), SubText = Color3.fromRGB(170, 220, 185) },
+    Pink    = { Background = Color3.fromRGB(70, 10, 50),  Accent = Color3.fromRGB(255, 90, 190), AccentDark = Color3.fromRGB(180, 40, 130), ElementBG = Color3.fromRGB(95, 20, 70),   Text = Color3.fromRGB(255, 235, 250), SubText = Color3.fromRGB(220, 175, 210) },
+    Orange  = { Background = Color3.fromRGB(70, 30, 0),   Accent = Color3.fromRGB(255, 150, 40), AccentDark = Color3.fromRGB(180, 95, 20),  ElementBG = Color3.fromRGB(95, 45, 5),    Text = Color3.fromRGB(255, 245, 230), SubText = Color3.fromRGB(220, 195, 170) },
+    Cyan    = { Background = Color3.fromRGB(0, 45, 55),   Accent = Color3.fromRGB(60, 220, 230), AccentDark = Color3.fromRGB(20, 140, 150), ElementBG = Color3.fromRGB(5, 65, 75),    Text = Color3.fromRGB(230, 255, 255), SubText = Color3.fromRGB(170, 215, 220) },
+    Yellow  = { Background = Color3.fromRGB(60, 55, 0),   Accent = Color3.fromRGB(240, 220, 50), AccentDark = Color3.fromRGB(170, 155, 20), ElementBG = Color3.fromRGB(85, 75, 5),    Text = Color3.fromRGB(255, 253, 230), SubText = Color3.fromRGB(215, 210, 170) },
+    Dark    = { Background = Color3.fromRGB(15, 15, 18),  Accent = Color3.fromRGB(120, 120, 130),AccentDark = Color3.fromRGB(60, 60, 68),   ElementBG = Color3.fromRGB(25, 25, 30),   Text = Color3.fromRGB(235, 235, 240), SubText = Color3.fromRGB(160, 160, 170) },
+    White   = { Background = Color3.fromRGB(235, 235, 240), Accent = Color3.fromRGB(90, 90, 220), AccentDark = Color3.fromRGB(200, 200, 210), ElementBG = Color3.fromRGB(215, 215, 225), Text = Color3.fromRGB(20, 20, 25), SubText = Color3.fromRGB(80, 80, 90) },
+    ColorblindSafe = { Background = Color3.fromRGB(10, 15, 25), Accent = Color3.fromRGB(230, 159, 0), AccentDark = Color3.fromRGB(0, 114, 178), ElementBG = Color3.fromRGB(20, 30, 45), Text = Color3.fromRGB(245, 245, 245), SubText = Color3.fromRGB(180, 190, 200) },
+}
+
+-- Default values (factory reset) – transparency 25%, theme Dark
+local DEFAULT_SETTINGS = {
+    Theme              = "Dark",         -- default theme changed to Dark
+    UIScale            = 100,
+    TextSize           = 100,
+    Transparency       = 25,
+    HighContrast       = false,
+    ReducedMotion      = false,
+    DyslexiaFont       = false,
+    ColorblindSafe     = false,
+    ReduceGlow         = false,
+    LargerTargets      = false,
+    ClickSounds        = false,
+    KeybindEnabled     = true,
+    AutoClose          = 0,
+}
+
+-- Current settings (will be loaded from saved data)
+local UserSettings = {}
+for k, v in pairs(DEFAULT_SETTINGS) do UserSettings[k] = v end
+
+-------------------------------------------------
+-- SAVE / LOAD
+-------------------------------------------------
+local SAVE_NAME = "XDEMIC_UI_SAVE"
+
+local function SaveSettings()
+    local json = HttpService:JSONEncode(UserSettings)
+    local save = PlayerGui:FindFirstChild(SAVE_NAME)
+    if not save then
+        save = Instance.new("StringValue")
+        save.Name = SAVE_NAME
+        save.Parent = PlayerGui
+    end
+    save.Value = json
+end
+
+local function LoadSettings()
+    local save = PlayerGui:FindFirstChild(SAVE_NAME)
+    if not save or save.Value == "" then return false end
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(save.Value)
+    end)
+    if success and type(data) == "table" then
+        for k, v in pairs(data) do
+            if DEFAULT_SETTINGS[k] ~= nil then
+                UserSettings[k] = v
+            end
+        end
+        return true
+    end
+    return false
+end
+
+-------------------------------------------------
+-- THEME & OTHER GLOBALS
+-------------------------------------------------
+local Theme = {
+    Transparency    = UserSettings.Transparency / 100,
+    Font            = Enum.Font.GothamBold,
+    FontRegular     = Enum.Font.Gotham,
+    ReducedMotion   = UserSettings.ReducedMotion,
+    TextScale       = UserSettings.TextSize / 100,
+    HighContrast    = UserSettings.HighContrast,
+}
+for k, v in pairs(ThemePresets[UserSettings.Theme] or ThemePresets.Dark) do Theme[k] = v end
+local currentThemeName = UserSettings.Theme
+local themeBeforeColorblind = currentThemeName
+
+local TextRegistry   = {}
+local ColorRegistry  = {}
+local StrokeRegistry = {}
+local soundsEnabled  = UserSettings.ClickSounds
+
+local function registerText(obj, baseSize)
+    TextRegistry[obj] = baseSize
+    obj.TextSize = baseSize * Theme.TextScale
+end
+
+local function registerColor(obj, prop, role)
+    table.insert(ColorRegistry, {obj = obj, prop = prop, role = role})
+    obj[prop] = Theme[role]
+    return obj
+end
+
+local function tween(obj, props, t)
+    t = Theme.ReducedMotion and 0.01 or (t or 0.2)
+    TweenService:Create(obj, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
+end
+
+local function corner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 8)
+    c.Parent = parent
+    return c
+end
+
+local function stroke(parent, role, thickness)
+    local s = Instance.new("UIStroke")
+    s.Thickness = thickness or 1
+    s.Parent = parent
+    registerColor(s, "Color", role or "Accent")
+    table.insert(StrokeRegistry, {obj = s, base = thickness or 1})
+    return s
+end
+
+local function playClick()
+    if not soundsEnabled then return end
+    local snd = Instance.new("Sound")
+    snd.SoundId = "rbxassetid://9083627113"
+    snd.Volume = 0.4
+    snd.Parent = SoundService
+    snd:Play()
+    game:GetService("Debris"):AddItem(snd, 2)
+end
+
+local function makeDraggable(handle, target)
+    local dragging, dragStart, startPos = false, nil, nil
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = target.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    handle.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-------------------------------------------------
+-- APPLY THEME (live)
+-------------------------------------------------
+local function applyTheme(name)
+    local preset = ThemePresets[name]
+    if not preset then return end
+    currentThemeName = name
+    UserSettings.Theme = name
+    for k, v in pairs(preset) do Theme[k] = v end
+    for _, entry in ipairs(ColorRegistry) do
+        if entry.obj and entry.obj.Parent then
+            entry.obj[entry.prop] = Theme[entry.role]
+        end
+    end
+    SaveSettings()
+end
+
+-------------------------------------------------
+-- NOTIFICATION SYSTEM (themed, queued)
+-------------------------------------------------
+local NotificationQueue = {}
+local NotificationActive = false
+local NotificationContainer
+
+-------------------------------------------------
+-- ROOT GUI
+-------------------------------------------------
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AXZEN_UI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = PlayerGui
+
+-- Notification container
+NotificationContainer = Instance.new("Frame")
+NotificationContainer.Name = "NotificationContainer"
+NotificationContainer.Size = UDim2.new(1, 0, 0, 80)
+NotificationContainer.Position = UDim2.new(0, 0, -1, 0)
+NotificationContainer.BackgroundTransparency = 1
+NotificationContainer.ZIndex = 200
+NotificationContainer.Parent = ScreenGui
+
+local function ShowNextNotification()
+    if NotificationActive or #NotificationQueue == 0 then return end
+    NotificationActive = true
+    local data = table.remove(NotificationQueue, 1)
+    
+    local notif = Instance.new("Frame")
+    notif.Size = UDim2.new(0, 400, 0, 70)
+    notif.Position = UDim2.new(0.5, -200, 0, 10)
+    notif.BackgroundColor3 = Theme.Accent
+    notif.BackgroundTransparency = 0.15
+    notif.Parent = NotificationContainer
+    corner(notif, 12)
+    stroke(notif, "Text", 1)
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -20, 0, 20)
+    title.Position = UDim2.new(0, 10, 0, 6)
+    title.BackgroundTransparency = 1
+    title.Font = Theme.Font
+    title.TextColor3 = Theme.Text
+    title.Text = data.title or ""
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = notif
+    registerText(title, 16)
+    
+    local msg = Instance.new("TextLabel")
+    msg.Size = UDim2.new(1, -20, 0, 30)
+    msg.Position = UDim2.new(0, 10, 0, 28)
+    msg.BackgroundTransparency = 1
+    msg.Font = Theme.FontRegular
+    msg.TextColor3 = Theme.SubText
+    msg.Text = data.message or ""
+    msg.TextXAlignment = Enum.TextXAlignment.Left
+    msg.TextWrapped = true
+    msg.Parent = notif
+    registerText(msg, 13)
+    
+    notif.Position = UDim2.new(0.5, -200, 0, -80)
+    tween(notif, {Position = UDim2.new(0.5, -200, 0, 10)}, 0.3)
+    
+    task.delay(data.duration or 3, function()
+        tween(notif, {Position = UDim2.new(0.5, -200, 0, -80)}, 0.3)
+        task.delay(0.3, function()
+            notif:Destroy()
+            NotificationActive = false
+            ShowNextNotification()
+        end)
+    end)
+end
+
+function Library:Notify(title, message, duration)
+    table.insert(NotificationQueue, {title = title, message = message, duration = duration or 3})
+    if not NotificationActive then
+        ShowNextNotification()
+    end
+end
+
+-------------------------------------------------
+-- BUBBLE
+-------------------------------------------------
+local Bubble = Instance.new("ImageButton")
+Bubble.Name = "Bubble"
+Bubble.Size = UDim2.new(0, 55, 0, 55)
+Bubble.Position = UDim2.new(0, 20, 0.5, -27)
+Bubble.BackgroundTransparency = 0.15
+Bubble.Image = "rbxassetid://0"
+Bubble.ScaleType = Enum.ScaleType.Fit
+Bubble.AutoButtonColor = false
+Bubble.ZIndex = 100
+Bubble.Parent = ScreenGui
+registerColor(Bubble, "BackgroundColor3", "Background")
+corner(Bubble, 27)
+stroke(Bubble, "Accent", 2)
+makeDraggable(Bubble, Bubble)
+
+-------------------------------------------------
+-- MAIN WINDOW
+-------------------------------------------------
+local WindowSize = {X = 520, Y = 380}
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, WindowSize.X, 0, WindowSize.Y)
+Main.Position = UDim2.new(0.5, -WindowSize.X/2, 0.5, -WindowSize.Y/2)
+Main.BackgroundTransparency = Theme.Transparency
+Main.Visible = false
+Main.ClipsDescendants = true
+Main.Parent = ScreenGui
+registerColor(Main, "BackgroundColor3", "Background")
+corner(Main, 12)
+stroke(Main, "Accent", 2)
+
+local UIScale = Instance.new("UIScale")
+UIScale.Scale = UserSettings.UIScale / 100
+UIScale.Parent = Main
+local baseUIScale = UserSettings.UIScale / 100
+local largerTargetsBonus = UserSettings.LargerTargets and 0.15 or 0
+
+local function recalcScale()
+    UIScale.Scale = baseUIScale + largerTargetsBonus
+end
+
+-- Title Bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Size = UDim2.new(1, 0, 0, 46)
+TitleBar.BackgroundTransparency = 0.25
+TitleBar.Parent = Main
+registerColor(TitleBar, "BackgroundColor3", "AccentDark")
+corner(TitleBar, 12)
+makeDraggable(TitleBar, Main)
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Position = UDim2.new(0, 14, 0, 4)
+TitleLabel.Size = UDim2.new(1, -100, 0, 20)
+TitleLabel.Font = Theme.Font
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Text = "AXZEN HUB"
+TitleLabel.Parent = TitleBar
+registerColor(TitleLabel, "TextColor3", "Text")
+registerText(TitleLabel, 16)
+
+local CreditLabel = Instance.new("TextLabel")
+CreditLabel.BackgroundTransparency = 1
+CreditLabel.Position = UDim2.new(0, 14, 0, 24)
+CreditLabel.Size = UDim2.new(1, -100, 0, 16)
+CreditLabel.Font = Theme.FontRegular
+CreditLabel.TextXAlignment = Enum.TextXAlignment.Left
+CreditLabel.Text = "MADE BY:AXZEN"
+CreditLabel.Parent = TitleBar
+registerColor(CreditLabel, "TextColor3", "SubText")
+registerText(CreditLabel, 12)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 32, 0, 32)
+CloseBtn.Position = UDim2.new(1, -40, 0, 7)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 60)
+CloseBtn.Text = "X"
+CloseBtn.Font = Theme.Font
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Parent = TitleBar
+corner(CloseBtn, 8)
+registerText(CloseBtn, 14)
+
+local TabList = Instance.new("Frame")
+TabList.Size = UDim2.new(0, 130, 1, -56)
+TabList.Position = UDim2.new(0, 8, 0, 52)
+TabList.BackgroundTransparency = 0.3
+TabList.Parent = Main
+registerColor(TabList, "BackgroundColor3", "ElementBG")
+corner(TabList, 10)
+
+local TabListLayout = Instance.new("UIListLayout")
+TabListLayout.Padding = UDim.new(0, 6)
+TabListLayout.Parent = TabList
+local TabListPad = Instance.new("UIPadding")
+TabListPad.PaddingTop = UDim.new(0, 8)
+TabListPad.PaddingLeft = UDim.new(0, 6)
+TabListPad.PaddingRight = UDim.new(0, 6)
+TabListPad.Parent = TabList
+
+local ContentHolder = Instance.new("Frame")
+ContentHolder.Size = UDim2.new(1, -150, 1, -56)
+ContentHolder.Position = UDim2.new(0, 146, 0, 52)
+ContentHolder.BackgroundTransparency = 1
+ContentHolder.Parent = Main
+
+-------------------------------------------------
+-- OPEN / CLOSE
+-------------------------------------------------
+local isOpen = false
+local lastInteraction = os.clock()
+
+local function setCoreVisible(visible)
+    pcall(function()
+        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat, visible)
+        StarterGui:SetCore("TopbarEnabled", visible)
+    end)
+end
+
+local function toggleMain()
+    isOpen = not isOpen
+    lastInteraction = os.clock()
+    if isOpen then
+        Main.Visible = true
+        Main.Size = UDim2.new(0, WindowSize.X, 0, 0)
+        Main.BackgroundTransparency = 1
+        tween(Main, {Size = UDim2.new(0, WindowSize.X, 0, WindowSize.Y), BackgroundTransparency = Theme.Transparency}, 0.25)
+        setCoreVisible(false)
+    else
+        tween(Main, {Size = UDim2.new(0, WindowSize.X, 0, 0), BackgroundTransparency = 1}, 0.22)
+        task.delay(0.22, function()
+            if not isOpen then Main.Visible = false end
+        end)
+        setCoreVisible(true)
+    end
+end
+
+Bubble.MouseButton1Click:Connect(function() toggleMain(); playClick() end)
+CloseBtn.MouseButton1Click:Connect(function() toggleMain(); playClick() end)
+
+local uiKeybindEnabled = UserSettings.KeybindEnabled
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    lastInteraction = os.clock()
+    if uiKeybindEnabled and input.KeyCode == Enum.KeyCode.RightControl then
+        toggleMain()
+    end
+end)
+
+local autoCloseSeconds = UserSettings.AutoClose
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if isOpen and autoCloseSeconds > 0 and (os.clock() - lastInteraction) >= autoCloseSeconds then
+            toggleMain()
+        end
+    end
+end)
+
+-------------------------------------------------
+-- LIBRARY API
+-------------------------------------------------
+function Library:SetIcon(robloxId)
+    Bubble.Image = "rbxassetid://" .. tostring(robloxId)
+end
+
+function Library:SetTitle(text)
+    TitleLabel.Text = text
+end
+
+function Library:Toggle()
+    toggleMain()
+end
+
+function Library:SetTheme(name)
+    applyTheme(name)
+end
+
+function Library:GetThemeNames()
+    local names = {}
+    for k in pairs(ThemePresets) do table.insert(names, k) end
+    table.sort(names)
+    return names
+end
+
+function Library:SetSize(width, height)
+    WindowSize = {X = width, Y = height}
+    Main.Size = UDim2.new(0, width, 0, height)
+    Main.Position = UDim2.new(0.5, -width/2, 0.5, -height/2)
+end
+
+-------------------------------------------------
+-- TAB SYSTEM
+-------------------------------------------------
+local tabs = {}
+local firstTab = true
+
+function Library:CreateTab(name)
+    local TabButton = Instance.new("TextButton")
+    TabButton.Size = UDim2.new(1, 0, 0, 32)
+    TabButton.BackgroundTransparency = 0.4
+    TabButton.Text = name
+    TabButton.Font = Theme.FontRegular
+    TabButton.Parent = TabList
+    registerColor(TabButton, "BackgroundColor3", "AccentDark")
+    registerColor(TabButton, "TextColor3", "Text")
+    corner(TabButton, 8)
+    registerText(TabButton, 13)
+
+    local Page = Instance.new("ScrollingFrame")
+    Page.Size = UDim2.new(1, 0, 1, 0)
+    Page.BackgroundTransparency = 1
+    Page.ScrollBarThickness = 4
+    Page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    Page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Page.Visible = firstTab
+    Page.Parent = ContentHolder
+    registerColor(Page, "ScrollBarImageColor3", "Accent")
+
+    local PageLayout = Instance.new("UIListLayout")
+    PageLayout.Padding = UDim.new(0, 8)
+    PageLayout.Parent = Page
+    local PagePad = Instance.new("UIPadding")
+    PagePad.PaddingTop = UDim.new(0, 4)
+    PagePad.PaddingLeft = UDim.new(0, 4)
+    PagePad.PaddingRight = UDim.new(0, 8)
+    PagePad.Parent = Page
+
+    if firstTab then
+        TabButton.BackgroundTransparency = 0
+        firstTab = false
+    end
+
+    TabButton.MouseButton1Click:Connect(function()
+        playClick()
+        for _, t in pairs(tabs) do
+            t.Page.Visible = false
+            t.Button.BackgroundTransparency = 0.4
+        end
+        Page.Visible = true
+        TabButton.BackgroundTransparency = 0
+    end)
+
+    local Tab = {}
+    tabs[#tabs+1] = {Button = TabButton, Page = Page}
+
+    -----------------------------------------------
+    function Tab:AddHeader(text)
+        local Header = Instance.new("Frame")
+        Header.Size = UDim2.new(1, 0, 0, 26)
+        Header.BackgroundTransparency = 1
+        Header.Parent = Page
+
+        local HLabel = Instance.new("TextLabel")
+        HLabel.BackgroundTransparency = 1
+        HLabel.Size = UDim2.new(1, 0, 0, 18)
+        HLabel.Text = text
+        HLabel.Font = Theme.Font
+        HLabel.TextXAlignment = Enum.TextXAlignment.Left
+        HLabel.Parent = Header
+        registerColor(HLabel, "TextColor3", "Accent")
+        registerText(HLabel, 15)
+
+        local Underline = Instance.new("Frame")
+        Underline.Size = UDim2.new(1, 0, 0, 2)
+        Underline.Position = UDim2.new(0, 0, 1, -4)
+        Underline.Parent = Header
+        registerColor(Underline, "BackgroundColor3", "Accent")
+        corner(Underline, 1)
+
+        return Header
+    end
+
+    -----------------------------------------------
+    function Tab:AddLabel(text)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 0, 22)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = text
+        lbl.Font = Theme.FontRegular
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = Page
+        registerColor(lbl, "TextColor3", "SubText")
+        registerText(lbl, 13)
+        return lbl
+    end
+
+    -----------------------------------------------
+    function Tab:AddButton(text, callback)
+        local Btn = Instance.new("TextButton")
+        Btn.Size = UDim2.new(1, 0, 0, 34)
+        Btn.Text = text
+        Btn.Font = Theme.Font
+        Btn.AutoButtonColor = false
+        Btn.Parent = Page
+        registerColor(Btn, "BackgroundColor3", "ElementBG")
+        registerColor(Btn, "TextColor3", "Text")
+        corner(Btn, 8)
+        stroke(Btn, "Accent", 1)
+        registerText(Btn, 14)
+
+        Btn.MouseEnter:Connect(function() tween(Btn, {BackgroundColor3 = Theme.AccentDark}) end)
+        Btn.MouseLeave:Connect(function() tween(Btn, {BackgroundColor3 = Theme.ElementBG}) end)
+        Btn.MouseButton1Click:Connect(function()
+            playClick()
+            tween(Btn, {BackgroundColor3 = Theme.Accent}, 0.08)
+            task.delay(0.1, function() tween(Btn, {BackgroundColor3 = Theme.ElementBG}) end)
+            if callback then callback() end
+        end)
+        return Btn
+    end
+
+    -----------------------------------------------
+    function Tab:AddToggle(text, default, callback)
+        local state = default or false
+
+        local Holder = Instance.new("Frame")
+        Holder.Size = UDim2.new(1, 0, 0, 34)
+        Holder.Parent = Page
+        registerColor(Holder, "BackgroundColor3", "ElementBG")
+        corner(Holder, 8)
+
+        local Label = Instance.new("TextLabel")
+        Label.BackgroundTransparency = 1
+        Label.Position = UDim2.new(0, 10, 0, 0)
+        Label.Size = UDim2.new(1, -70, 1, 0)
+        Label.Text = text
+        Label.Font = Theme.FontRegular
+        Label.TextXAlignment = Enum.TextXAlignment.Left
+        Label.Parent = Holder
+        registerColor(Label, "TextColor3", "Text")
+        registerText(Label, 13)
+
+        local Switch = Instance.new("TextButton")
+        Switch.Size = UDim2.new(0, 44, 0, 22)
+        Switch.Position = UDim2.new(1, -54, 0.5, -11)
+        Switch.BackgroundColor3 = state and Theme.Accent or Color3.fromRGB(80, 80, 90)
+        Switch.Text = ""
+        Switch.AutoButtonColor = false
+        Switch.Parent = Holder
+        corner(Switch, 11)
+
+        local Knob = Instance.new("Frame")
+        Knob.Size = UDim2.new(0, 18, 0, 18)
+        Knob.Position = state and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+        Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        Knob.Parent = Switch
+        corner(Knob, 9)
+
+        local function refresh()
+            tween(Switch, {BackgroundColor3 = state and Theme.Accent or Color3.fromRGB(80, 80, 90)})
+            tween(Knob, {Position = state and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)})
+        end
+
+        Switch.MouseButton1Click:Connect(function()
+            playClick()
+            state = not state
+            refresh()
+            if callback then callback(state) end
+        end)
+
+        return {
+            Set = function(_, v) state = v; refresh(); if callback then callback(state) end end,
+            Get = function() return state end
+        }
+    end
+
+    -----------------------------------------------
+    function Tab:AddSlider(text, min, max, default, callback)
+        min, max = min or 0, max or 100
+        local value = math.clamp(default or min, min, max)
+
+        local Holder = Instance.new("Frame")
+        Holder.Size = UDim2.new(1, 0, 0, 48)
+        Holder.Parent = Page
+        registerColor(Holder, "BackgroundColor3", "ElementBG")
+        corner(Holder, 8)
+
+        local Label = Instance.new("TextLabel")
+        Label.BackgroundTransparency = 1
+        Label.Position = UDim2.new(0, 10, 0, 4)
+        Label.Size = UDim2.new(1, -70, 0, 18)
+        Label.Text = text
+        Label.Font = Theme.FontRegular
+        Label.TextXAlignment = Enum.TextXAlignment.Left
+        Label.Parent = Holder
+        registerColor(Label, "TextColor3", "Text")
+        registerText(Label, 13)
+
+        local ValueLabel = Instance.new("TextLabel")
+        ValueLabel.BackgroundTransparency = 1
+        ValueLabel.Position = UDim2.new(1, -60, 0, 4)
+        ValueLabel.Size = UDim2.new(0, 50, 0, 18)
+        ValueLabel.Text = tostring(value)
+        ValueLabel.Font = Theme.Font
+        ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
+        ValueLabel.Parent = Holder
+        registerColor(ValueLabel, "TextColor3", "Accent")
+        registerText(ValueLabel, 13)
+
+        local Track = Instance.new("Frame")
+        Track.Position = UDim2.new(0, 10, 0, 28)
+        Track.Size = UDim2.new(1, -20, 0, 8)
+        Track.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+        Track.Parent = Holder
+        corner(Track, 4)
+
+        local Fill = Instance.new("Frame")
+        Fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
+        Fill.Parent = Track
+        registerColor(Fill, "BackgroundColor3", "Accent")
+        corner(Fill, 4)
+
+        local Knob = Instance.new("TextButton")
+        Knob.Size = UDim2.new(0, 16, 0, 16)
+        Knob.Position = UDim2.new((value - min) / (max - min), -8, 0.5, -8)
+        Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        Knob.Text = ""
+        Knob.Parent = Track
+        corner(Knob, 8)
+
+        local dragging = false
+        Knob.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local rel = math.clamp((input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
+                value = math.floor(min + rel * (max - min) + 0.5)
+                Fill.Size = UDim2.new(rel, 0, 1, 0)
+                Knob.Position = UDim2.new(rel, -8, 0.5, -8)
+                ValueLabel.Text = tostring(value)
+                if callback then callback(value) end
+            end
+        end)
+
+        return {
+            Set = function(_, v)
+                value = math.clamp(v, min, max)
+                local rel = (value - min) / (max - min)
+                Fill.Size = UDim2.new(rel, 0, 1, 0)
+                Knob.Position = UDim2.new(rel, -8, 0.5, -8)
+                ValueLabel.Text = tostring(value)
+                if callback then callback(value) end
+            end,
+            Get = function() return value end
+        }
+    end
+
+    -----------------------------------------------
+    function Tab:AddDropdown(text, options, callback)
+        options = options or {}
+        local open = false
+        local selected = options[1]
+
+        local Holder = Instance.new("Frame")
+        Holder.Size = UDim2.new(1, 0, 0, 34)
+        Holder.ClipsDescendants = true
+        Holder.Parent = Page
+        registerColor(Holder, "BackgroundColor3", "ElementBG")
+        corner(Holder, 8)
+
+        local Btn = Instance.new("TextButton")
+        Btn.Size = UDim2.new(1, 0, 0, 34)
+        Btn.BackgroundTransparency = 1
+        Btn.Text = text .. ": " .. tostring(selected)
+        Btn.Font = Theme.FontRegular
+        Btn.Parent = Holder
+        registerColor(Btn, "TextColor3", "Text")
+        registerText(Btn, 13)
+
+        local List = Instance.new("Frame")
+        List.Position = UDim2.new(0, 0, 0, 34)
+        List.Size = UDim2.new(1, 0, 0, #options * 26)
+        List.BackgroundTransparency = 1
+        List.Parent = Holder
+        local ListLayout = Instance.new("UIListLayout")
+        ListLayout.Parent = List
+
+        for _, opt in ipairs(options) do
+            local OptBtn = Instance.new("TextButton")
+            OptBtn.Size = UDim2.new(1, 0, 0, 26)
+            OptBtn.BackgroundTransparency = 1
+            OptBtn.Text = tostring(opt)
+            OptBtn.Font = Theme.FontRegular
+            OptBtn.Parent = List
+            registerColor(OptBtn, "TextColor3", "SubText")
+            registerText(OptBtn, 12)
+            OptBtn.MouseButton1Click:Connect(function()
+                playClick()
+                selected = opt
+                Btn.Text = text .. ": " .. tostring(selected)
+                open = false
+                tween(Holder, {Size = UDim2.new(1, 0, 0, 34)})
+                if callback then callback(selected) end
+            end)
+        end
+
+        Btn.MouseButton1Click:Connect(function()
+            playClick()
+            open = not open
+            tween(Holder, {Size = open and UDim2.new(1, 0, 0, 34 + #options * 26) or UDim2.new(1, 0, 0, 34)})
+        end)
+
+        return {Get = function() return selected end}
+    end
+
+    return Tab
+end
+
+-------------------------------------------------
+-- ACCESSIBILITY TAB (with save/load & reset)
+-------------------------------------------------
+function Library:AddAccessibilityTab()
+    local AccTab = Library:CreateTab("Accessibility")
+
+    local controls = {}
+
+    AccTab:AddHeader("Appearance")
+    local themeDropdown = AccTab:AddDropdown("Color Theme", Library:GetThemeNames(), function(selected)
+        applyTheme(selected)
+        UserSettings.Theme = selected
+        SaveSettings()
+    end)
+    themeDropdown:Get()
+
+    local uiScaleSlider = AccTab:AddSlider("UI Scale", 50, 150, UserSettings.UIScale, function(v)
+        baseUIScale = v / 100
+        UserSettings.UIScale = v
+        recalcScale()
+        SaveSettings()
+    end)
+    controls.uiScaleSlider = uiScaleSlider
+
+    local textSizeSlider = AccTab:AddSlider("Text Size", 80, 150, UserSettings.TextSize, function(v)
+        Theme.TextScale = v / 100
+        UserSettings.TextSize = v
+        for obj, base in pairs(TextRegistry) do
+            if obj and obj.Parent then obj.TextSize = base * Theme.TextScale end
+        end
+        SaveSettings()
+    end)
+    controls.textSizeSlider = textSizeSlider
+
+    local transparencySlider = AccTab:AddSlider("Window Transparency", 0, 90, UserSettings.Transparency, function(v)
+        Theme.Transparency = v / 100
+        UserSettings.Transparency = v
+        if not Theme.HighContrast then Main.BackgroundTransparency = Theme.Transparency end
+        SaveSettings()
+    end)
+    controls.transparencySlider = transparencySlider
+
+    local highContrastToggle = AccTab:AddToggle("High Contrast Mode", UserSettings.HighContrast, function(state)
+        Theme.HighContrast = state
+        UserSettings.HighContrast = state
+        if state then
+            Main.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            Main.BackgroundTransparency = 0.1
+        else
+            Main.BackgroundColor3 = Theme.Background
+            Main.BackgroundTransparency = Theme.Transparency
+        end
+        SaveSettings()
+    end)
+    controls.highContrastToggle = highContrastToggle
+
+    AccTab:AddHeader("Comfort")
+    local reducedMotionToggle = AccTab:AddToggle("Reduced Motion", UserSettings.ReducedMotion, function(state)
+        Theme.ReducedMotion = state
+        UserSettings.ReducedMotion = state
+        SaveSettings()
+    end)
+    controls.reducedMotionToggle = reducedMotionToggle
+
+    local dyslexiaToggle = AccTab:AddToggle("Dyslexia-Friendly Font", UserSettings.DyslexiaFont, function(state)
+        UserSettings.DyslexiaFont = state
+        for obj in pairs(TextRegistry) do
+            if obj and obj.Parent then
+                if state then
+                    obj:SetAttribute("OrigFont", obj.Font.Name)
+                    obj.Font = Enum.Font.Sans
+                else
+                    local orig = obj:GetAttribute("OrigFont")
+                    obj.Font = (orig and Enum.Font[orig]) or Theme.FontRegular
+                end
+            end
+        end
+        SaveSettings()
+    end)
+    controls.dyslexiaToggle = dyslexiaToggle
+
+    local colorblindToggle = AccTab:AddToggle("Colorblind Safe Palette", UserSettings.ColorblindSafe, function(state)
+        UserSettings.ColorblindSafe = state
+        if state then
+            themeBeforeColorblind = currentThemeName
+            applyTheme("ColorblindSafe")
+        else
+            applyTheme(themeBeforeColorblind)
+        end
+        SaveSettings()
+    end)
+    controls.colorblindToggle = colorblindToggle
+
+    local reduceGlowToggle = AccTab:AddToggle("Reduce Glow / Outline Effects", UserSettings.ReduceGlow, function(state)
+        UserSettings.ReduceGlow = state
+        for _, e in ipairs(StrokeRegistry) do
+            if e.obj and e.obj.Parent then
+                e.obj.Thickness = state and 0 or e.base
+            end
+        end
+        SaveSettings()
+    end)
+    controls.reduceGlowToggle = reduceGlowToggle
+
+    AccTab:AddHeader("Interaction")
+    local largerTargetsToggle = AccTab:AddToggle("Larger Click Targets", UserSettings.LargerTargets, function(state)
+        largerTargetsBonus = state and 0.15 or 0
+        UserSettings.LargerTargets = state
+        recalcScale()
+        SaveSettings()
+    end)
+    controls.largerTargetsToggle = largerTargetsToggle
+
+    local soundsToggle = AccTab:AddToggle("Button Click Sounds", UserSettings.ClickSounds, function(state)
+        soundsEnabled = state
+        UserSettings.ClickSounds = state
+        SaveSettings()
+    end)
+    controls.soundsToggle = soundsToggle
+
+    local keybindToggle = AccTab:AddToggle("Enable RightCtrl Hotkey to Open/Close", UserSettings.KeybindEnabled, function(state)
+        uiKeybindEnabled = state
+        UserSettings.KeybindEnabled = state
+        SaveSettings()
+    end)
+    controls.keybindToggle = keybindToggle
+
+    local autoCloseSlider = AccTab:AddSlider("Auto-Close After Inactivity (sec, 0 = off)", 0, 120, UserSettings.AutoClose, function(v)
+        autoCloseSeconds = v
+        UserSettings.AutoClose = v
+        SaveSettings()
+    end)
+    controls.autoCloseSlider = autoCloseSlider
+
+    AccTab:AddHeader("Reset")
+    AccTab:AddButton("Reset to Defaults", function()
+        for k, v in pairs(DEFAULT_SETTINGS) do
+            UserSettings[k] = v
+        end
+        applyTheme(UserSettings.Theme)
+        uiScaleSlider:Set(UserSettings.UIScale)
+        textSizeSlider:Set(UserSettings.TextSize)
+        transparencySlider:Set(UserSettings.Transparency)
+        highContrastToggle:Set(UserSettings.HighContrast)
+        reducedMotionToggle:Set(UserSettings.ReducedMotion)
+        dyslexiaToggle:Set(UserSettings.DyslexiaFont)
+        colorblindToggle:Set(UserSettings.ColorblindSafe)
+        reduceGlowToggle:Set(UserSettings.ReduceGlow)
+        largerTargetsToggle:Set(UserSettings.LargerTargets)
+        soundsToggle:Set(UserSettings.ClickSounds)
+        keybindToggle:Set(UserSettings.KeybindEnabled)
+        autoCloseSlider:Set(UserSettings.AutoClose)
+
+        baseUIScale = UserSettings.UIScale / 100
+        largerTargetsBonus = UserSettings.LargerTargets and 0.15 or 0
+        recalcScale()
+        Theme.TextScale = UserSettings.TextSize / 100
+        for obj, base in pairs(TextRegistry) do
+            if obj and obj.Parent then obj.TextSize = base * Theme.TextScale end
+        end
+        Theme.Transparency = UserSettings.Transparency / 100
+        if not Theme.HighContrast then Main.BackgroundTransparency = Theme.Transparency end
+        Theme.ReducedMotion = UserSettings.ReducedMotion
+        soundsEnabled = UserSettings.ClickSounds
+        uiKeybindEnabled = UserSettings.KeybindEnabled
+        autoCloseSeconds = UserSettings.AutoClose
+        SaveSettings()
+        playClick()
+    end)
+
+    task.spawn(function()
+        applyTheme(UserSettings.Theme)
+        uiScaleSlider:Set(UserSettings.UIScale)
+        textSizeSlider:Set(UserSettings.TextSize)
+        transparencySlider:Set(UserSettings.Transparency)
+        highContrastToggle:Set(UserSettings.HighContrast)
+        reducedMotionToggle:Set(UserSettings.ReducedMotion)
+        dyslexiaToggle:Set(UserSettings.DyslexiaFont)
+        colorblindToggle:Set(UserSettings.ColorblindSafe)
+        reduceGlowToggle:Set(UserSettings.ReduceGlow)
+        largerTargetsToggle:Set(UserSettings.LargerTargets)
+        soundsToggle:Set(UserSettings.ClickSounds)
+        keybindToggle:Set(UserSettings.KeybindEnabled)
+        autoCloseSlider:Set(UserSettings.AutoClose)
+
+        baseUIScale = UserSettings.UIScale / 100
+        largerTargetsBonus = UserSettings.LargerTargets and 0.15 or 0
+        recalcScale()
+        Theme.TextScale = UserSettings.TextSize / 100
+        for obj, base in pairs(TextRegistry) do
+            if obj and obj.Parent then obj.TextSize = base * Theme.TextScale end
+        end
+        Theme.Transparency = UserSettings.Transparency / 100
+        if not Theme.HighContrast then Main.BackgroundTransparency = Theme.Transparency end
+        Theme.ReducedMotion = UserSettings.ReducedMotion
+        soundsEnabled = UserSettings.ClickSounds
+        uiKeybindEnabled = UserSettings.KeybindEnabled
+        autoCloseSeconds = UserSettings.AutoClose
+    end)
+
+    return AccTab
+end
+
+-------------------------------------------------
+-- Load settings & finalize
+-------------------------------------------------
+local loaded = LoadSettings()
+if loaded then
+    applyTheme(UserSettings.Theme)
+    Theme.Transparency = UserSettings.Transparency / 100
+    Main.BackgroundTransparency = Theme.Transparency
+    baseUIScale = UserSettings.UIScale / 100
+    largerTargetsBonus = UserSettings.LargerTargets and 0.15 or 0
+    recalcScale()
+    Theme.TextScale = UserSettings.TextSize / 100
+    for obj, base in pairs(TextRegistry) do
+        if obj and obj.Parent then obj.TextSize = base * Theme.TextScale end
+    end
+    if UserSettings.HighContrast then
+        Main.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        Main.BackgroundTransparency = 0.1
+    end
+    Theme.ReducedMotion = UserSettings.ReducedMotion
+    soundsEnabled = UserSettings.ClickSounds
+    uiKeybindEnabled = UserSettings.KeybindEnabled
+    autoCloseSeconds = UserSettings.AutoClose
+    if UserSettings.ReduceGlow then
+        for _, e in ipairs(StrokeRegistry) do
+            if e.obj and e.obj.Parent then
+                e.obj.Thickness = 0
+            end
+        end
+    end
+end
+
+-- Add the Accessibility tab (built-in)
+Library:AddAccessibilityTab()
+
+return Library
